@@ -2,8 +2,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from fastapi import HTTPException
 
-from app.db.models.admin import AdminUser
-from app.schemas.admin import AdminUserCreate
+from app.db.models.admin_user import AdminUser
+from app.schemas.admin_user import AdminUserCreate
 
 async def create_admin(payload: AdminUserCreate, db: AsyncSession):
     result = await db.execute(select(AdminUser).where(AdminUser.email == payload.email))

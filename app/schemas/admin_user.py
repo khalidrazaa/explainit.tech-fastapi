@@ -1,9 +1,16 @@
-from pydantic import BaseModel, EmailStr, constr
+from pydantic import BaseModel, EmailStr, Field
+from typing import Annotated
 from datetime import date
+
+GenderStr = Annotated[
+    str,
+    Field(pattern="^(male|female|other)$", description="Allowed values: male, female, other")
+]
 
 class AdminUserCreate(BaseModel):
     email: EmailStr
-    phone: constr(min_length=10, max_length=15)
+    phone: Annotated[str, Field(min_length=10, max_length=15)]
     full_name: str
-    gender: constr(to_lower=True, regex="^(male|female|other)$")
+    gender: GenderStr
     dob: date
+    is_active: bool

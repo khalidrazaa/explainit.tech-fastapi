@@ -5,7 +5,7 @@ from sqlalchemy.future import select
 from app.db.session import get_db
 from app.db.models.admin_user import AdminUser  # your actual Admin model
 from app.schemas.admin_user import AdminUserCreate  # your actual schema
-from app.db.services.admin_service import create_admin
+from app.services.admin_service import create_admin
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
 

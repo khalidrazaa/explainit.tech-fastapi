@@ -1,9 +1,14 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 
-class LoginRequest(BaseModel):
-    username: str
-    password: str
+class OTPRequest(BaseModel):
+    email: EmailStr
+
+
+class OTPVerifyRequest(BaseModel):
+    email: EmailStr
+    otp: str
+
 
 class LoginResponse(BaseModel):
     access_token: str
-    token_type: str = "bearer"
+    token_type: str
