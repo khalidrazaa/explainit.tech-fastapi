@@ -23,3 +23,7 @@ async def on_startup():
 @app.get("/")
 async def root():
     return { "message": "BE ExplainIt.Tech up and Running" }
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
