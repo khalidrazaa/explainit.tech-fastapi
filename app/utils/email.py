@@ -7,7 +7,9 @@ load_dotenv()
 
 async def send_email_otp(to_email: str, otp: str):
     message = EmailMessage()
-    message["From"] = os.getenv("EMAIL_USERNAME")
+    from_email = os.getenv("EMAIL_USERNAME")
+    
+    message["From"] = from_email
     message["To"] = to_email
     message["Subject"] = "Your OTP for ExplainIt.Tech"
     message.set_content(f"Your OTP is: {otp}\nIt will expire in 5 minutes.")
@@ -18,5 +20,5 @@ async def send_email_otp(to_email: str, otp: str):
         port=int(os.getenv("EMAIL_PORT")),
         username=os.getenv("EMAIL_USERNAME"),
         password=os.getenv("EMAIL_PASSWORD"),
-        start_tls=True,
+        start_tls=True,   # ✅ this enables STARTTLS for Outlook
     )

@@ -4,7 +4,7 @@ from app.db.session import get_db
 from app.schemas.auth import OTPRequest, OTPVerifyRequest, LoginResponse
 from app.services.auth_service import send_otp_service, verify_otp_service
 
-router = APIRouter(prefix="/auth", tags=["auth"])
+router = APIRouter()
 
 @router.post("/send-otp")
 async def send_otp(payload: OTPRequest, db: AsyncSession = Depends(get_db)):

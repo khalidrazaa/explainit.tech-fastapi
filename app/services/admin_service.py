@@ -4,8 +4,9 @@ from fastapi import HTTPException
 
 from app.db.models.admin_user import AdminUser
 from app.schemas.admin_user import AdminUserCreate
+from app.services.auth_service import send_otp_service
 
-async def create_admin(payload: AdminUserCreate, db: AsyncSession):
+async def create_admin_service(payload: AdminUserCreate, db: AsyncSession):
     result = await db.execute(select(AdminUser).where(AdminUser.email == payload.email))
     existing_admin = result.scalar_one_or_none()
 
@@ -23,5 +24,9 @@ async def create_admin(payload: AdminUserCreate, db: AsyncSession):
     db.add(admin)
     await db.commit()
     await db.refresh(admin)
+    
+    otp = await send_otp_service(admin.email, db)
+    if otp["status"] == False:
+        raise HTTPException(status_code=400, detail=otp["message"])
 
-    return admin
+    return {admin : admin, "status": True, "message": "Admin created successfully"}
