@@ -31,10 +31,16 @@ async def send_otp_service(email: str, db: AsyncSession):
     else:
         new_otp = EmailOTP(email=email, otp=otp, expires_at=expires_at)
         db.add(new_otp)
+        
+    try:
+        await send_email_otp(email, otp)
+    except Exception as e:
+        await db.rollback() # rollback DB changes if sending fails
+        raise HTTPException(status_code=500, detail=str(e))
 
     await db.commit()
-    await send_email_otp(email, otp)
-    return {"message": f"OTP sent to {email}"}
+    #await send_email_otp(email, otp)
+    return {"status":True, "message": f"OTP sent to {email}"}
 
 async def verify_otp_service(email: str, otp: str, db: AsyncSession):
     result = await db.execute(select(EmailOTP).where(EmailOTP.email == email))
@@ -51,4 +57,4 @@ async def verify_otp_service(email: str, otp: str, db: AsyncSession):
     await db.commit()
 
     token = create_access_token(data={"sub": email})
-    return {"access_token": token, "token_type": "bearer"}
+    return {"status": True, "access_token": token, "token_type": "bearer"}

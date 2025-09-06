@@ -13,4 +13,4 @@ class AdminUserCreate(BaseModel):
     full_name: str
     gender: GenderStr
     dob: date
-    is_active: bool
+    is_active: bool = False

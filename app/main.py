@@ -1,11 +1,23 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from app.api.router import router as api_router
 from app.db.session import engine
 import asyncio
+import os
 
 
 app = FastAPI()
 
+# ✅ Add CORS Middleware here
+origins = os.getenv("CORS_ORIGINS").split(",")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,        # or ["*"] for all
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 app.include_router(api_router, prefix="/v1/api")
 
@@ -22,7 +34,7 @@ async def on_startup():
 
 @app.get("/")
 async def root():
-    return { "message": "BE ExplainIt.Tech up and Running" }
+    return { "message": "ExplainIt.Tech up and Running" }
 
 if __name__ == "__main__":
     import uvicorn
