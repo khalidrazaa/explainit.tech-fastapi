@@ -12,4 +12,5 @@ router = APIRouter()
 @router.post("/create", status_code=201)
 async def create_admin(payload: AdminUserCreate, db: AsyncSession = Depends(get_db)):
     admin = await create_admin_service(payload, db)
+    print("admin", admin)
     return {"message": "Admin created successfully", "admin_id": admin.id}
