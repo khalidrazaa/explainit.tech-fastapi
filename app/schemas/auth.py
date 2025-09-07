@@ -10,5 +10,6 @@ class OTPVerifyRequest(BaseModel):
 
 
 class LoginResponse(BaseModel):
-    access_token: str
+    status: bool
     token_type: str
+    message: str
