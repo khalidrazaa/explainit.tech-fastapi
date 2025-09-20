@@ -16,15 +16,5 @@ async def create_admin(payload: AdminUserCreate, db: AsyncSession = Depends(get_
     return {"message": "Admin created successfully", "admin_id": admin.id}
 
 
-@admin_router.get("/trends")
-async def fetch_google_trends(
-    category: str = Query("all", description="Google trends category")
-):
-    """Fetch trending topics from Google Trends"""
-    return await get_google_trends_topics(category)
 
 
-@admin_router.post("/trends/generate")
-async def generate_articles_from_trends(topic: str):
-    """Generate an article draft from a selected trend"""
-    return await generate_article_from_topic(topic)

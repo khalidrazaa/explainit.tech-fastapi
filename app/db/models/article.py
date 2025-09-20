@@ -26,7 +26,7 @@ class Article(Base):
     published_at = Column(DateTime(timezone=True), nullable=True)
 
     # Author relationship (optional foreign key if you have users table)
-    author_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    author_id = Column(Integer, nullable=True)
 
     # Content
     content = Column(Text, nullable=True)   # HTML / Markdown
