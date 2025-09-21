@@ -1,82 +1,110 @@
 import os
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Optional
 from datetime import datetime
 import asyncio
 
-import httpx
+from serpapi import GoogleSearch
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.db.models.keyword import Keyword
 from app.schemas.keyword import KeywordSuggestion, KeywordResponse
 
-SERP_API_KEY = os.getenv("SERPAPI_KEY")
-BASE_URL = os.getenv("SERPAPI_BASE_URL")
+SERP_API_KEY = os.getenv("SERP_API_KEY")
 
 
 class KeywordService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def _http_get(self, params: dict) -> dict:
-        async with httpx.AsyncClient(timeout=20.0) as client:
-            r = await client.get(BASE_URL, params=params)
-            r.raise_for_status()
-            return r.json() or {}
+    # --- Generic SerpAPI fetch wrapper ---
+    def _search(self, params: dict) -> dict:
+        try:
+            params["api_key"] = SERP_API_KEY
+            search = GoogleSearch(params)
+            return search.get_dict() or {}
+        except Exception as e:
+            print(f"SerpAPI error: {e}")
+            return {}
 
     # --- Fetch methods ---
     async def fetch_google_autocomplete(self, keyword: str) -> List[str]:
-        try:
-            params = {"engine": "google_autocomplete", "q": keyword, "api_key": SERP_API_KEY}
-            data = await self._http_get(params)
-            suggestions = data.get("suggestions") or []
-            return [s.get("value") for s in suggestions if s.get("value")]
-        except Exception:
-            return []
+        data = self._search({
+            "engine": "google_autocomplete",
+            "q": keyword,
+            "hl": "en",
+            "gl": "us"
+        })
+        suggestions = []
+        for item in data.get("suggestions", []):
+            if isinstance(item, dict):
+                if "value" in item:
+                    suggestions.append(item["value"])
+                elif "suggestion" in item:
+                    suggestions.append(item["suggestion"])
+            elif isinstance(item, str):
+                suggestions.append(item)
+        return suggestions
 
     async def fetch_google_trends(self, keyword: str) -> float:
-        try:
-            params = {"engine": "google_trends", "q": keyword, "api_key": SERP_API_KEY}
-            data = await self._http_get(params)
-            arr = data.get("interest_over_time") or []
-            if not arr:
-                return 0.0
-            return float(arr[-1].get("value", 0) or 0)
-        except Exception:
+        data = self._search({
+            "engine": "google_trends",
+            "q": keyword,
+            "data_type": "TIMESERIES"
+        })
+        arr = data.get("interest_over_time", [])
+        if not arr:
             return 0.0
+        return float(arr[-1].get("value", 0) or 0)
 
     async def fetch_google_search_related(self, keyword: str) -> List[str]:
-        try:
-            params = {"engine": "google", "q": keyword, "api_key": SERP_API_KEY}
-            data = await self._http_get(params)
-            related = data.get("related_searches") or []
-            result = []
-            for item in related:
-                if isinstance(item, dict):
-                    result.append(item.get("query") or item.get("value"))
-                else:
-                    result.append(item)
-            return [r for r in result if r]
-        except Exception:
-            return []
+        data = self._search({
+            "engine": "google",
+            "q": keyword,
+            "hl": "en",
+            "gl": "us"
+        })
+        related = data.get("related_searches") or []
+        result = []
+        for item in data.get("related_searches", []):
+            if isinstance(item, dict):
+                if "query" in item:
+                    result.append(item["query"])
+                elif "value" in item:
+                    result.append(item["value"])
+            elif isinstance(item, str):
+                result.append(item)
+        return result
 
     async def fetch_youtube(self, keyword: str) -> List[str]:
-        try:
-            params = {"engine": "youtube", "search_query": keyword, "api_key": SERP_API_KEY}
-            data = await self._http_get(params)
-            videos = data.get("video_results") or []
-            return [v.get("title") for v in videos if v.get("title")]
-        except Exception:
-            return []
+        data = self._search({
+            "engine": "youtube",
+            "search_query": keyword,
+        })
+
+        titles = []
+        for item in data.get("video_results", []):
+            if isinstance(item, dict) and "title" in item:
+                title.append(item["title"])
+            elif isinstance(item, str):
+                title.append(item)
+        return title
 
     async def fetch_news(self, keyword: str) -> List[str]:
-        try:
-            params = {"engine": "google_news", "q": keyword, "api_key": SERP_API_KEY}
-            data = await self._http_get(params)
-            news = data.get("news_results") or []
-            return [n.get("title") for n in news if n.get("title")]
-        except Exception:
-            return []
+        data = self._search({
+            "engine": "google_news",
+            "q": keyword,
+            "hl": "en",
+            "gl": "us"
+        })
+
+        headlines= []
+        for item in data.get("news_results", []):
+            if isinstance(item, dict) and "title" in item:
+                headlines.append(item["title"])
+            elif isinstance(item, str):
+                headlines.append(item)
+        return headlines
 
     # --- DB functions ---
     async def _db_get_keyword(self, keyword: str) -> Optional[Keyword]:
@@ -102,7 +130,7 @@ class KeywordService:
         return obj
 
     # --- Main function ---
-    async def get_keyword_data(self, keyword: str) -> dict:
+    async def get_keyword_data(self, keyword: str) -> KeywordResponse:
         # 1) Check DB
         db_keyword = await self._db_get_keyword(keyword)
         if db_keyword:
@@ -111,15 +139,14 @@ class KeywordService:
                 KeywordSuggestion(suggestion=item.get("suggestion"), source=item.get("source", ""))
                 for item in saved
             ]
-            return {
-                "status": "ok",
-                "keyword": db_keyword.keyword,
-                "suggestions": suggestions,
-                "monthly_searches": db_keyword.monthly_searches,
-                "cpc": db_keyword.cpc,
-                "seo_difficulty": db_keyword.seo_difficulty,
-                "trend_score": 0.0  # DB may not have trends stored
-            }
+            return KeywordResponse(
+                status="success",
+                keyword=db_keyword.keyword,
+                suggestions=suggestions,
+                monthly_searches=db_keyword.monthly_searches,
+                cpc=db_keyword.cpc,
+                seo_difficulty=db_keyword.seo_difficulty,
+            )
 
         # 2) Fetch from all sources concurrently
         auto, trend_score, related, youtube, news = await self._gather_sources(keyword)
@@ -144,22 +171,19 @@ class KeywordService:
         created = await self._db_create_keyword(keyword, "mixed", suggestions_list)
 
         # 4) Build response
-        resp_suggestions = [
-            KeywordSuggestion(suggestion=item["suggestion"], source=item["source"]) for item in suggestions_list
-        ]
+        resp_suggestions = [item["suggestion"] for item in suggestions_list]
 
         return {
-            "status": "ok",
-            "keyword": keyword,
-            "suggestions": resp_suggestions,
-            "monthly_searches": created.monthly_searches,
-            "cpc": created.cpc,
-            "seo_difficulty": created.seo_difficulty,
-            "trend_score": trend_score,
+        "status": "success",
+        "keyword": keyword,
+        "suggestions": resp_suggestions,
+        "monthly_searches": created.monthly_searches,
+        "cpc": created.cpc,
+        "seo_difficulty": created.seo_difficulty,
         }
 
     async def _gather_sources(self, keyword: str):
-        """Run all source fetches concurrently, safely returning defaults if any fail."""
+        """Run all source fetches concurrently."""
         tasks = [
             self.fetch_google_autocomplete(keyword),
             self.fetch_google_trends(keyword),
@@ -167,13 +191,4 @@ class KeywordService:
             self.fetch_youtube(keyword),
             self.fetch_news(keyword),
         ]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-
-        final_results = []
-        for r in results:
-            if isinstance(r, Exception):
-                # Determine type based on index of task
-                final_results.append([] if isinstance(r, list) else 0.0)
-            else:
-                final_results.append(r)
-        return final_results  # auto, trend_score, related, youtube, news
+        return await asyncio.gather(*tasks, return_exceptions=False)
