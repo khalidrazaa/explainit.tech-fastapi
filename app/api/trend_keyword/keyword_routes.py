@@ -14,3 +14,8 @@ async def get_keywords(req: KeywordRequest, db: AsyncSession = Depends(get_db)):
     
     service = KeywordService(db)
     return await service.get_keyword_data(req.keyword.strip())
+
+@router.get("/trends/{geo}")
+async def get_trends(geo: str = "US", category: int = 0, db: AsyncSession = Depends(get_db)):
+    service = KeywordService(db)
+    return await service.get_trending_keywords(geo, category)
