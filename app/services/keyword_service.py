@@ -32,13 +32,11 @@ class KeywordService:
 
     # --- Fetch methods ---
     async def fetch_google_autocomplete(self, keyword: str) -> List[str]:
-        data = self._search({
-            "engine": "google_autocomplete",
-            "q": keyword,
-            "hl": "en",
-            "gl": "us"
-        })
+        params = {"engine": "google_autocomplete", "q": keyword, "api_key": SERP_API_KEY}
+        data = self._search(params)
         suggestions = []
+
+        print("google_auto_complete-data", data)
         for item in data.get("suggestions", []):
             if isinstance(item, dict):
                 if "value" in item:
@@ -50,23 +48,20 @@ class KeywordService:
         return suggestions
 
     async def fetch_google_trends(self, keyword: str) -> float:
-        data = self._search({
-            "engine": "google_trends",
-            "q": keyword,
-            "data_type": "TIMESERIES"
-        })
+        params = {"engine": "google_trends", "q": keyword, "api_key": SERP_API_KEY}
+        data = await self._search(params)
+
+        print("google_trends-data", data)
         arr = data.get("interest_over_time", [])
         if not arr:
             return 0.0
         return float(arr[-1].get("value", 0) or 0)
 
     async def fetch_google_search_related(self, keyword: str) -> List[str]:
-        data = self._search({
-            "engine": "google",
-            "q": keyword,
-            "hl": "en",
-            "gl": "us"
-        })
+        params = {"engine": "google", "q": keyword, "api_key": SERP_API_KEY}
+        data = self._search(params)
+        print("google_search-data", data)
+
         related = data.get("related_searches") or []
         result = []
         for item in data.get("related_searches", []):
@@ -80,27 +75,23 @@ class KeywordService:
         return result
 
     async def fetch_youtube(self, keyword: str) -> List[str]:
-        data = self._search({
-            "engine": "youtube",
-            "search_query": keyword,
-        })
+        params = {"engine": "youtube", "search_query": keyword, "api_key": SERP_API_KEY}
+        data = self._search(params)
 
+        print("youtube-data", data)
         titles = []
         for item in data.get("video_results", []):
             if isinstance(item, dict) and "title" in item:
                 title.append(item["title"])
             elif isinstance(item, str):
                 title.append(item)
-        return title
+        return titles
 
     async def fetch_news(self, keyword: str) -> List[str]:
-        data = self._search({
-            "engine": "google_news",
-            "q": keyword,
-            "hl": "en",
-            "gl": "us"
-        })
+        params = {"engine": "google_news", "q": keyword, "api_key": SERP_API_KEY}
+        data = self._search(params)
 
+        print("google_new-data", data)
         headlines= []
         for item in data.get("news_results", []):
             if isinstance(item, dict) and "title" in item:
@@ -112,7 +103,7 @@ class KeywordService:
     # --- DB functions ---
     async def _db_get_keyword(self, keyword: str) -> Optional[Keyword]:
         stmt = select(Keyword).where(Keyword.keyword == keyword)
-        result = await self.db.execute(stmt)
+        result = self.db.execute(stmt)
         return result.scalars().first()
 
     async def _db_create_keyword(self, keyword: str, source: str, suggestions: List[Dict[str, str]]) -> Keyword:
