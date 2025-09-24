@@ -15,13 +15,12 @@ async def get_keywords(req: KeywordRequest, db: AsyncSession = Depends(get_db)):
     service = KeywordService(db)
     return await service.get_keyword_data(req.keyword.strip())
 
-@router.get("/trends/{geo}")
-async def get_trends(geo: str = "US", category: int = 0, db: AsyncSession = Depends(get_db)):
-    service = KeywordService(db)
-    return await service.get_trending_keywords(geo, category)
-
-
-@router.post("/trends/scrape")
-async def scrape_trends(geo: str = "US", db: AsyncSession = Depends(get_db)):
-    result = await fetch_trending_csv_and_save(db, geo=geo)
-    return result
+@router.post("/scrape")
+async def scrape_trends(geo: str = "US", hours:str = "168", sts :str = "active", db: AsyncSession = Depends(get_db)):
+    result = await fetch_trending_csv_and_save(db, geo=geo, hours=hours, sts=sts)
+    return {
+        "result" : result,
+        "status" : True,
+        "geo" : geo,
+        "hours" : hours
+    }
