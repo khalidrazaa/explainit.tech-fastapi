@@ -188,47 +188,4 @@ class KeywordService:
         return await asyncio.gather(*tasks, return_exceptions=False)
 
     
-    async def get_trending_keywords(self, geo: str = "US", category: int = 0):
-        pytrends = TrendReq(hl="en-US", tz=360)
-
-        try:
-            trending = pytrends.trending_searches(pn=geo)
-            keywords = trending[0].tolist()
-        except Exception as e:
-            return {"status": "error", "message": str(e)}
-
-        # --- helper function to get topic type ---
-        async def get_category(kw: str):
-            loop = asyncio.get_event_loop()
-            try:
-                # Run blocking pytrends call in executor
-                related = await loop.run_in_executor(None, lambda: pytrends.build_payload([kw]))
-                topics = await loop.run_in_executor(None, lambda: pytrends.related_topics())
-                topic_df = topics.get(kw, {}).get("top")
-                if topic_df is not None and not topic_df.empty:
-                    # pick first topic as category
-                    topic_type = topic_df.iloc[0].get("topic_type")
-                    if topic_type:
-                        return TOPIC_TYPE_MAP.get(topic_type, ("General", topic_type))
-                return ("General", None)
-            except Exception:
-                return ("General", None)
-
-        # Fetch categories concurrently for speed
-        tasks = [get_category(kw) for kw in keywords]
-        categories = await asyncio.gather(*tasks, return_exceptions=True)
-
-        # Format final response
-        response = []
-        for kw, cat in zip(keywords, categories):
-            if isinstance(cat, tuple):
-                category, subcategory = cat
-            else:
-                category, subcategory = "General", None
-            response.append({
-                "keyword": kw,
-                "category": category,
-                "subcategory": subcategory
-            })
-
-        return response
+    
