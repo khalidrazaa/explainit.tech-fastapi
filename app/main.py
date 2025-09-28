@@ -9,11 +9,12 @@ from app.db.mongodb import get_mongo_db
 app = FastAPI()
 
 # ✅ Add CORS Middleware here
-origins = os.getenv("CORS_ORIGINS").split(",")
+origins = os.getenv("CORS_ORIGINS", "")
+allow_origins = [o.strip() for o in origins.split(",") if o.strip()]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,        # or ["*"] for all
+    allow_origins=allow_origins,        # or ["*"] for all
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
