@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Optional, Dict
 from datetime import datetime
 
@@ -28,8 +28,8 @@ class KeywordRead(KeywordBase):
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
+
 
 # Response used by /keywords API: returns the searched keyword + suggestions
 class KeywordResponse(BaseModel):
@@ -39,3 +39,5 @@ class KeywordResponse(BaseModel):
     monthly_searches: Optional[int] = None
     cpc: Optional[float] = None
     seo_difficulty: Optional[float] = None
+
+    model_config = ConfigDict(from_attributes=True)

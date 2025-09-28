@@ -8,6 +8,7 @@ anyio==4.9.0
 h11==0.16.0
 watchfiles==1.1.0
 websockets==15.0.1
+gunicorn
 
 # --- Config & Validation ---
 pydantic==2.11.7
