@@ -6,8 +6,6 @@ import asyncio
 import os
 from app.db.mongodb import get_mongo_db
 
-
-
 app = FastAPI()
 
 # ✅ Add CORS Middleware here
