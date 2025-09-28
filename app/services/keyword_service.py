@@ -3,7 +3,6 @@ from typing import List, Dict, Optional
 from datetime import datetime
 import asyncio
 
-from pytrends.request import TrendReq
 import asyncio
 
 from serpapi import GoogleSearch
