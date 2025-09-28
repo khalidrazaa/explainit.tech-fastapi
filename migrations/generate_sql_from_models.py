@@ -1,5 +1,5 @@
 import os
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect
 from sqlalchemy.schema import CreateTable
 from dotenv import load_dotenv
 
@@ -7,6 +7,9 @@ from app.db.session import Base
 import app.db.models.admin_user
 import app.db.models.email_otp
 import app.db.models.token
+import app.db.models.keyword
+import app.db.models.article
+
 
 load_dotenv()
 
@@ -15,6 +18,7 @@ if not DATABASE_URL:
     raise ValueError("DATABASE_URL not set in .env or environment variables")
 
 engine = create_engine(DATABASE_URL)
+inspector = inspect(engine)
 
 # Folder where .sql files will be saved
 migrations_dir = os.path.join(os.path.dirname(__file__), "history_sql_mig")
@@ -28,13 +32,25 @@ if existing_files:
 else:
     next_num = 1
 
-migration_filename = f"{next_num:03d}_create_tables.sql"
+migration_filename = f"{next_num:03d}_update_tables.sql"
 migration_file = os.path.join(migrations_dir, migration_filename)
 
-# Write CREATE TABLE statements
+statements = []
+
+for table in Base.metadata.sorted_tables:
+    table_name = table.name
+    if table_name in inspector.get_table_names():
+        # Table exists → check for new columns
+        existing_cols = {col['name'] for col in inspector.get_columns(table_name)}
+        for col in table.columns:
+            if col.name not in existing_cols:
+                statements.append(f"ALTER TABLE {table_name} ADD COLUMN {CreateTable(col).compile(engine)};")
+    else:
+        # Table does not exist → full CREATE TABLE
+        statements.append(str(CreateTable(table).compile(engine)) + ";")
+
+# Write migration SQL
 with open(migration_file, "w", encoding="utf-8") as f:
-    for table in Base.metadata.sorted_tables:
-        sql = str(CreateTable(table).compile(engine))
-        f.write(f"{sql};\n\n")
+    f.write("\n\n".join(statements))
 
 print(f"✅ Migration SQL generated at {migration_file}")

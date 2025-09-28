@@ -14,3 +14,7 @@ async def create_admin(payload: AdminUserCreate, db: AsyncSession = Depends(get_
     admin = await create_admin_service(payload, db)
     print("admin", admin)
     return {"message": "Admin created successfully", "admin_id": admin.id}
+
+
+
+
