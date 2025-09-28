@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, ConfigDict
 from typing import Annotated
 from datetime import date
 
@@ -14,3 +14,5 @@ class AdminUserCreate(BaseModel):
     gender: GenderStr
     dob: date
     is_active: bool = False
+
+    model_config = ConfigDict(from_attributes=True)

@@ -13,5 +13,4 @@ def get_mongo_db():
     if client is None:
         client = MongoClient(MONGO_URI)
         db = client[MONGO_DB_NAME]
-    print("db", db)
     return db

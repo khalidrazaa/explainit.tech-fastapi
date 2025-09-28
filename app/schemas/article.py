@@ -1,6 +1,6 @@
 from typing import List, Optional
 from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 # Shared properties
@@ -57,5 +57,4 @@ class ArticleResponse(ArticleBase):
     updated_at: Optional[datetime] = None
     published_at: Optional[datetime] = None
 
-    class Config:
-        orm_mode = True  # This allows Pydantic to work with SQLAlchemy models
+    model_config = ConfigDict(from_attributes=True)
