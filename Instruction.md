@@ -17,7 +17,7 @@ docker run -it --rm -p 8000:10000 -e PORT=10000 explainit-fastapi:local
 
 # 4️⃣ Optional: Override environment variables locally
 # You can pass a .env file:
-docker run --env-file .env -p 8000:10000 explainit-fastapi:loc
+docker run --env-file .env -p 8000:10000 explainit-fastapi:local
 
 # Test commands inside container (optional)
 docker run -it --rm -e PORT=10000 explainit-fastapi:local /bin/bash
