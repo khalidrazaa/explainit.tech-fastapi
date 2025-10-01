@@ -6,7 +6,7 @@ import os
 import io
 import re
 from dateutil import parser
-from pymongo import MongoClient
+from motor.motor_asyncio import AsyncIOMotorClient
 from playwright.async_api import async_playwright
 from app.db.mongodb import get_mongo_db
 from app.db.models.trends import TrendItem
@@ -116,13 +116,12 @@ class TrendsScraper:
             print("Failed to parse datetime:", dt_str, e)
             return None
 
-    def save_csv_bytes_to_mongo(self, csv_bytes: bytes) -> int:
+    async def save_csv_bytes_to_mongo(self, csv_bytes: bytes) -> int:
         """Parse CSV bytes and upsert rows into MongoDB."""
         inserted_count = 0
         f = io.StringIO(csv_bytes.decode("utf-8"))
         reader = csv.DictReader(f)
 
-        from pymongo import UpdateOne
         operations = []
 
         for row in reader:
@@ -136,31 +135,32 @@ class TrendsScraper:
                     "search_volume": self.parse_search_volume(row.get("Search volume")),
                     "started": self.parse_datetime(row.get("Started")),
                     "ended": self.parse_datetime(row.get("Ended")),
-                    "trend_breakdown": [
-                        x.strip()
-                        for x in row.get("Trend breakdown", "").split(",")
-                        if x.strip()
-                    ],
+                    "trend_breakdown": row.get("Trend breakdown", "").strip(),
+                    #[
+                        #x.strip()
+                        #for x in row.get("Trend breakdown", "").split(",")
+                        #if x.strip()
+                    #],
                     "explore_link": row.get("Explore link"),
                     "last_updated": datetime.utcnow(),
                 }
 
-                operations.append(
-                    UpdateOne(
-                        {"trend": trend_name},
-                        {"$set": trend_doc},
-                        upsert=True
-                    )
+                # Upsert asynchronously with motor
+                result = await self.collection.update_one(
+                    {"trend": trend_name},
+                    {"$set": trend_doc},
+                    upsert=True
                 )
+
+                # Track inserted/modified counts
+                inserted_count += result.upserted_id is not None
+
+                operations.append(trend_doc)  # Keep the actual document for UI
+
             except Exception as e:
                 print("Failed to process row:", row, e)
 
-        if operations:
-            result = self.collection.bulk_write(operations)
-            print(
-                f"Inserted: {getattr(result, 'upserted_count', 0)}, "
-                f"Modified: {getattr(result, 'modified_count', 0)}"
-            )
-            inserted_count = getattr(result, "upserted_count", 0) + getattr(result, "modified_count", 0)
-
-        return inserted_count, operations
+        return {
+            "processed_rows": inserted_count,
+            "operations": operations
+        }
