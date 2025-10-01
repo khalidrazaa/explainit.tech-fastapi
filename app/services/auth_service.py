@@ -19,7 +19,7 @@ async def send_otp_service(email: str, db: AsyncSession):
         raise HTTPException(status_code=404, detail="User not found")
 
     otp = generate_otp()
-    expires_at = datetime.utcnow() + timedelta(minutes=5)
+    expires_at = datetime.utcnow() + timedelta(minutes=10)
 
     # Check if OTP already exists
     result = await db.execute(select(EmailOTP).where(EmailOTP.email == email))
@@ -53,7 +53,7 @@ async def verify_otp_service(email: str, otp: str, db: AsyncSession):
         raise HTTPException(status_code=401, detail="OTP expired")
 
     # OTP is valid – optionally delete or expire it
-    await db.delete(otp_record)
+    # await db.delete(otp_record)
     await db.commit()
 
     token = create_access_token(data={"sub": email})
