@@ -20,12 +20,6 @@ async def get_keywords(req: KeywordRequest, db: AsyncSession = Depends(get_db)):
 async def scrape_trends(geo:str, hours:str, sts:str):
     scraper = TrendsScraper()
     print("scrape", geo, hours, sts)
-    csv_bytes = await scraper.fetch_trending_csv_bytes(geo, hours, sts)
-    result = await scraper.save_csv_bytes_to_mongo(csv_bytes)
-    return {
-        "status": True,
-        "geo": geo,
-        "hours": hours,
-        "operations": result['operations'],
-        "processed_rows":result['processed_rows'], 
-    }
+    data = await scraper.fetch_trending_csv_bytes(geo, hours, sts)
+    # result = await save_csv_bytes_to_mongo_pandas(csv_bytes)
+    return data
