@@ -36,6 +36,7 @@ async def send_otp_service(email: str, db: AsyncSession):
         await send_email_otp(email, otp)
     except Exception as e:
         await db.rollback() # rollback DB changes if sending fails
+        print(f"Error sending email: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
     await db.commit()

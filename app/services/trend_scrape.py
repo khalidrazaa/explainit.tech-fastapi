@@ -6,15 +6,27 @@ import os
 import io
 import re
 from dateutil import parser
-from pymongo import MongoClient
+from motor.motor_asyncio import AsyncIOMotorClient
 from playwright.async_api import async_playwright
 from app.db.mongodb import get_mongo_db
 from app.db.models.trends import TrendItem
+import pandas as pd
+from pymongo import UpdateOne
+from io import BytesIO
 
 class TrendsScraper:
     def __init__(self, collection_name: str = "trending_searches"):
         self.db = get_mongo_db()
         self.collection = self.db[collection_name]
+        asyncio.create_task(self._ensure_indexes()) # run async index creation
+
+    async def _ensure_indexes(self):
+        await self.collection.create_index("trend", unique=True)
+        await self.collection.create_index("status")
+        await self.collection.create_index("category")
+        await self.collection.create_index("subcategory")
+        await self.collection.create_index("is_growing", 1),("category",1)
+        #await self.collection.create_index("last_updated", expireAfterSeconds=60 * 60 * 24)
 
     async def fetch_trending_csv_bytes(
         self,
@@ -73,7 +85,9 @@ class TrendsScraper:
             # Step 9: Close browser
             await browser.close()
 
-        return csv_bytes
+            result = await self.save_csv_bytes_to_mongo_pandas(csv_bytes)
+
+        return {"result":result, "geo":geo, "hours":hours,"status":True}
 
 
     @staticmethod
@@ -103,64 +117,123 @@ class TrendsScraper:
         
         return int(number)
 
-    @staticmethod
-    def parse_datetime(dt_str: str):
-        """Parse datetime string with potential weird spaces and UTC offsets."""
-        if not dt_str:
-            return None
-        # Replace non-breaking / narrow spaces
-        dt_str = dt_str.replace("\u202f", " ").replace("\xa0", " ")
-        try:
-            return parser.parse(dt_str)
-        except Exception as e:
-            print("Failed to parse datetime:", dt_str, e)
-            return None
+    # @staticmethod
+    # def parse_datetime(dt_str: str):
+    #     """Parse datetime string, handling NaN/None safely."""
+    #     if pd.isna(dt_str):  # catches NaN/None
+    #         return None
+    #     if not isinstance(dt_str, str):  # just in case
+    #         return None
+# 
+    #     # Replace non-breaking / narrow spaces
+    #     dt_str = dt_str.replace("\u202f", " ").replace("\xa0", " ")
+    #     try:
+    #         return parser.parse(dt_str)
+    #     except Exception as e:
+    #         print("Failed to parse datetime:", dt_str, e)
+    #         return None
 
-    def save_csv_bytes_to_mongo(self, csv_bytes: bytes) -> int:
-        """Parse CSV bytes and upsert rows into MongoDB."""
-        inserted_count = 0
-        f = io.StringIO(csv_bytes.decode("utf-8"))
-        reader = csv.DictReader(f)
+    async def save_csv_bytes_to_mongo_pandas(self, csv_bytes: bytes) -> dict:
+        """Parse CSV with Pandas, update MongoDB with volume history, growth, and Gemini categorization."""
+        ts_now = datetime.utcnow()
 
-        from pymongo import UpdateOne
-        operations = []
+        # Load CSV into Pandas DataFrame
+        df = pd.read_csv(BytesIO(csv_bytes))
+        df.columns = [c.strip() for c in df.columns]
 
-        for row in reader:
-            try:
-                trend_name = row.get("Trends", "").strip()
-                if not trend_name:
-                    continue
+        # Parse search volume & datetime
+        df["search_volume"] = df["Search volume"].fillna("0").apply(self.parse_search_volume)
 
-                trend_doc = {
-                    "trend": trend_name,
-                    "search_volume": self.parse_search_volume(row.get("Search volume")),
-                    "started": self.parse_datetime(row.get("Started")),
-                    "ended": self.parse_datetime(row.get("Ended")),
-                    "trend_breakdown": [
-                        x.strip()
-                        for x in row.get("Trend breakdown", "").split(",")
-                        if x.strip()
-                    ],
-                    "explore_link": row.get("Explore link"),
-                    "last_updated": datetime.utcnow(),
-                }
+        # ✅ safer vectorized datetime parsing instead of row-wise .apply(self.parse_datetime)
+        df["started"] = pd.to_datetime(df["Started"], errors="coerce", utc=True)
+        df["ended"] = pd.to_datetime(df["Ended"], errors="coerce", utc=True)
 
-                operations.append(
-                    UpdateOne(
-                        {"trend": trend_name},
-                        {"$set": trend_doc},
-                        upsert=True
-                    )
-                )
-            except Exception as e:
-                print("Failed to process row:", row, e)
+        df["trend_breakdown"] = df["Trend breakdown"].fillna("").str.strip()
+        df["explore_link"] = df["Explore link"]
 
-        if operations:
-            result = self.collection.bulk_write(operations)
-            print(
-                f"Inserted: {getattr(result, 'upserted_count', 0)}, "
-                f"Modified: {getattr(result, 'modified_count', 0)}"
-            )
-            inserted_count = getattr(result, "upserted_count", 0) + getattr(result, "modified_count", 0)
+        # Filter out trends with zero search volume
+        df = df[df["search_volume"] > 0]
 
-        return inserted_count, operations
+        if df.empty:
+            return {
+                "processed_rows": 0,
+                "inserted_count": 0,
+                "matched_count": 0,
+                "modified_count": 0,
+                "categorized_count": 0,
+            }
+
+        trend_names = df["Trends"].str.strip().unique().tolist()
+
+        # Fetch existing trends from MongoDB
+        existing_docs = await self.collection.find({"trend": {"$in": trend_names}}).to_list(length=None)
+        existing_map = {doc["trend"]: doc for doc in existing_docs}
+
+        bulk_ops = []
+        uncategorized_trends = []
+
+        for _, row in df.iterrows():
+            trend_name = row["Trends"].strip()
+            existing_doc = existing_map.get(trend_name)
+
+            # Volume history
+            volume_history = existing_doc.get("volume_history", []) if existing_doc else []
+            volume_history.append({"ts": ts_now, "value": row["search_volume"]})
+            if len(volume_history) > 20:
+                volume_history = volume_history[-20:]
+
+            # Determine growth
+            is_growing = False
+            if len(volume_history) >= 2:
+                is_growing = volume_history[-1]["value"] > volume_history[-2]["value"]
+
+            trend_doc = {
+                "trend": trend_name,
+                "search_volume": row["search_volume"],
+                "started": row["started"].to_pydatetime() if pd.notna(row["started"]) else None,
+                "ended": row["ended"].to_pydatetime() if pd.notna(row["ended"]) else None,
+                "trend_breakdown": row["trend_breakdown"],
+                "explore_link": row["explore_link"],
+                "last_updated": ts_now,
+                "volume_history": volume_history,
+                "is_growing": is_growing,
+                "category": existing_doc.get("category") if existing_doc else None,
+                "subcategory": existing_doc.get("subcategory") if existing_doc else None,
+                "draft_id": existing_doc.get("draft_id") if existing_doc else None,
+                "status": existing_doc.get("status", "Open") if existing_doc else "Open",
+            }
+
+            if not trend_doc["category"] and is_growing:
+                uncategorized_trends.append(trend_name)
+
+            bulk_ops.append(UpdateOne({"trend": trend_name}, {"$set": trend_doc}, upsert=True))
+
+        # Bulk write all trends
+        bulk_result = None
+        if bulk_ops:
+            bulk_result = await self.collection.bulk_write(bulk_ops, ordered=False)
+
+        # Gemini categorization for new/uncategorized trends
+        categorized_count = 0
+        if uncategorized_trends:
+            # Mock Gemini call for now
+            gemini_results = {t: {"category": "Tech", "subcategory": "AI"} for t in uncategorized_trends}
+
+            gemini_bulk_ops = []
+            for t, cat in gemini_results.items():
+                gemini_bulk_ops.append(UpdateOne(
+                    {"trend": t},
+                    {"$set": {"category": cat["category"], "subcategory": cat["subcategory"]}}
+                ))
+
+            if gemini_bulk_ops:
+                gemini_result = await self.collection.bulk_write(gemini_bulk_ops, ordered=False)
+                categorized_count = gemini_result.modified_count
+
+        return {
+            "processed_rows": len(df),
+            "inserted_count": bulk_result.upserted_count if bulk_result else 0,
+            "matched_count": bulk_result.matched_count if bulk_result else 0,
+            "modified_count": bulk_result.modified_count if bulk_result else 0,
+            "categorized_count": categorized_count,
+        }
